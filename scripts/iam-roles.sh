@@ -1,0 +1,205 @@
+# Script from: https://docs.vmware.com/en/VMware-Tanzu-Application-Platform/1.3/tap/GUID-aws-resources.html
+# Modified slightly for generation based upon variables
+# Modified build-service-policy.json to refer to tbs-full-deps as well
+# Modified workload-policy.json to remove tanzu java web app, redundancies
+
+: ${EKS_CLUSTER_NAME?"Need to set EKS_CLUSTER_NAME environment variable"}
+: ${AWS_REGION?"Need to set AWS_REGION environment variable"}
+: ${AWS_ACCOUNT_ID?"Need to set AWS_ACCOUNT_ID environment variable"}
+
+
+export oidcProvider=$(aws eks describe-cluster --name $EKS_CLUSTER_NAME --region $AWS_REGION --output json | jq '.cluster.identity.oidc.issuer' | tr -d '"' | sed 's/https:\/\///')
+GENERATED_FOLDER_PATH=generated/iam
+mkdir -p $GENERATED_FOLDER_PATH
+cat << EOF > $GENERATED_FOLDER_PATH/build-service-trust-policy.json
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Effect": "Allow",
+            "Principal": {
+                "Federated": "arn:aws:iam::${AWS_ACCOUNT_ID}:oidc-provider/${oidcProvider}"
+            },
+            "Action": "sts:AssumeRoleWithWebIdentity",
+            "Condition": {
+                "StringEquals": {
+                    "${oidcProvider}:aud": "sts.amazonaws.com"
+                },
+                "StringLike": {
+                    "${oidcProvider}:sub": [
+                        "system:serviceaccount:kpack:controller",
+                        "system:serviceaccount:build-service:dependency-updater-controller-serviceaccount"
+                    ]
+                }
+            }
+        }
+    ]
+}
+EOF
+
+cat << EOF > $GENERATED_FOLDER_PATH/build-service-policy.json
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Action": [
+                "ecr:DescribeRegistry",
+                "ecr:GetAuthorizationToken",
+                "ecr:GetRegistryPolicy",
+                "ecr:PutRegistryPolicy",
+                "ecr:PutReplicationConfiguration",
+                "ecr:DeleteRegistryPolicy"
+            ],
+            "Resource": "*",
+            "Effect": "Allow",
+            "Sid": "TAPEcrBuildServiceGlobal"
+        },
+        {
+            "Action": [
+                "ecr:DescribeImages",
+                "ecr:ListImages",
+                "ecr:BatchCheckLayerAvailability",
+                "ecr:BatchGetImage",
+                "ecr:BatchGetRepositoryScanningConfiguration",
+                "ecr:DescribeImageReplicationStatus",
+                "ecr:DescribeImageScanFindings",
+                "ecr:DescribeRepositories",
+                "ecr:GetDownloadUrlForLayer",
+                "ecr:GetLifecyclePolicy",
+                "ecr:GetLifecyclePolicyPreview",
+                "ecr:GetRegistryScanningConfiguration",
+                "ecr:GetRepositoryPolicy",
+                "ecr:ListTagsForResource",
+                "ecr:TagResource",
+                "ecr:UntagResource",
+                "ecr:BatchDeleteImage",
+                "ecr:BatchImportUpstreamImage",
+                "ecr:CompleteLayerUpload",
+                "ecr:CreatePullThroughCacheRule",
+                "ecr:CreateRepository",
+                "ecr:DeleteLifecyclePolicy",
+                "ecr:DeletePullThroughCacheRule",
+                "ecr:DeleteRepository",
+                "ecr:InitiateLayerUpload",
+                "ecr:PutImage",
+                "ecr:PutImageScanningConfiguration",
+                "ecr:PutImageTagMutability",
+                "ecr:PutLifecyclePolicy",
+                "ecr:PutRegistryScanningConfiguration",
+                "ecr:ReplicateImage",
+                "ecr:StartImageScan",
+                "ecr:StartLifecyclePolicyPreview",
+                "ecr:UploadLayerPart",
+                "ecr:DeleteRepositoryPolicy",
+                "ecr:SetRepositoryPolicy"
+            ],
+            "Resource": [
+                "arn:aws:ecr:${AWS_REGION}:${AWS_ACCOUNT_ID}:repository/tap-build-service",
+                "arn:aws:ecr:${AWS_REGION}:${AWS_ACCOUNT_ID}:repository/tbs-full-deps",
+                "arn:aws:ecr:${AWS_REGION}:${AWS_ACCOUNT_ID}:repository/tap-images"
+            ],
+            "Effect": "Allow",
+            "Sid": "TAPEcrBuildServiceScoped"
+        }
+    ]
+}
+EOF
+
+cat << EOF > $GENERATED_FOLDER_PATH/workload-policy.json
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Action": [
+                "ecr:DescribeRegistry",
+                "ecr:GetAuthorizationToken",
+                "ecr:GetRegistryPolicy",
+                "ecr:PutRegistryPolicy",
+                "ecr:PutReplicationConfiguration",
+                "ecr:DeleteRegistryPolicy"
+            ],
+            "Resource": "*",
+            "Effect": "Allow",
+            "Sid": "TAPEcrWorkloadGlobal"
+        },
+        {
+            "Action": [
+                "ecr:DescribeImages",
+                "ecr:ListImages",
+                "ecr:BatchCheckLayerAvailability",
+                "ecr:BatchGetImage",
+                "ecr:BatchGetRepositoryScanningConfiguration",
+                "ecr:DescribeImageReplicationStatus",
+                "ecr:DescribeImageScanFindings",
+                "ecr:DescribeRepositories",
+                "ecr:GetDownloadUrlForLayer",
+                "ecr:GetLifecyclePolicy",
+                "ecr:GetLifecyclePolicyPreview",
+                "ecr:GetRegistryScanningConfiguration",
+                "ecr:GetRepositoryPolicy",
+                "ecr:ListTagsForResource",
+                "ecr:TagResource",
+                "ecr:UntagResource",
+                "ecr:BatchDeleteImage",
+                "ecr:BatchImportUpstreamImage",
+                "ecr:CompleteLayerUpload",
+                "ecr:CreatePullThroughCacheRule",
+                "ecr:CreateRepository",
+                "ecr:DeleteLifecyclePolicy",
+                "ecr:DeletePullThroughCacheRule",
+                "ecr:DeleteRepository",
+                "ecr:InitiateLayerUpload",
+                "ecr:PutImage",
+                "ecr:PutImageScanningConfiguration",
+                "ecr:PutImageTagMutability",
+                "ecr:PutLifecyclePolicy",
+                "ecr:PutRegistryScanningConfiguration",
+                "ecr:ReplicateImage",
+                "ecr:StartImageScan",
+                "ecr:StartLifecyclePolicyPreview",
+                "ecr:UploadLayerPart",
+                "ecr:DeleteRepositoryPolicy",
+                "ecr:SetRepositoryPolicy"
+            ],
+            "Resource": [
+                "arn:aws:ecr:${AWS_REGION}:${AWS_ACCOUNT_ID}:repository/tap-build-service",
+                "arn:aws:ecr:${AWS_REGION}:${AWS_ACCOUNT_ID}:repository/tanzu-application-platform/*"
+            ],
+            "Effect": "Allow",
+            "Sid": "TAPEcrWorkloadScoped"
+        }
+    ]
+}
+EOF
+
+cat << EOF > $GENERATED_FOLDER_PATH/workload-trust-policy.json
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Effect": "Allow",
+            "Principal": {
+                "Federated": "arn:aws:iam::${AWS_ACCOUNT_ID}:oidc-provider/${oidcProvider}"
+            },
+            "Action": "sts:AssumeRoleWithWebIdentity",
+            "Condition": {
+                "StringEquals": {
+                    "${oidcProvider}:sub": "system:serviceaccount:default:default",
+                    "${oidcProvider}:aud": "sts.amazonaws.com"
+                }
+            }
+        }
+    ]
+}
+EOF
+
+
+# Create the Build Service Role
+aws iam create-role --role-name tap-build-service --assume-role-policy-document file://$GENERATED_FOLDER_PATH/build-service-trust-policy.json
+# Attach the Policy to the Build Role
+aws iam put-role-policy --role-name tap-build-service --policy-name tapBuildServicePolicy --policy-document file://$GENERATED_FOLDER_PATH/build-service-policy.json
+
+# Create the Workload Role
+aws iam create-role --role-name tap-workload --assume-role-policy-document file://$GENERATED_FOLDER_PATH/workload-trust-policy.json
+# Attach the Policy to the Workload Role
+aws iam put-role-policy --role-name tap-workload --policy-name tapWorkload --policy-document file://$GENERATED_FOLDER_PATH/workload-policy.json
