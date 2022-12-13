@@ -1,4 +1,4 @@
-# Script from: https://docs.vmware.com/en/VMware-Tanzu-Application-Platform/1.3/tap/GUID-aws-resources.html
+# Script from: https://docs.vmware.com/en/VMware-Tanzu-Application-Platform/1.3/tap/GUID-aws-resources.html#create-iam-roles-4
 # Modified slightly for generation based upon variables
 # Modified build-service-policy.json to refer to tbs-full-deps as well
 # Modified workload-policy.json to remove tanzu java web app, redundancies
@@ -95,8 +95,8 @@ cat << EOF > $GENERATED_FOLDER_PATH/build-service-policy.json
             ],
             "Resource": [
                 "arn:aws:ecr:${AWS_REGION}:${AWS_ACCOUNT_ID}:repository/tap-build-service",
-                "arn:aws:ecr:${AWS_REGION}:${AWS_ACCOUNT_ID}:repository/tbs-full-deps",
-                "arn:aws:ecr:${AWS_REGION}:${AWS_ACCOUNT_ID}:repository/tap-images"
+                "arn:aws:ecr:${AWS_REGION}:${AWS_ACCOUNT_ID}:repository/tap-images",
+                "arn:aws:ecr:${AWS_REGION}:${AWS_ACCOUNT_ID}:repository/tbs-full-deps"
             ],
             "Effect": "Allow",
             "Sid": "TAPEcrBuildServiceScoped"

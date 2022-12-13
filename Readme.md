@@ -2,30 +2,54 @@
 
 [Docs](https://docs.vmware.com/en/VMware-Tanzu-Application-Platform/1.3/tap/GUID-aws-install-intro.html)
 
+This plan assumes relocating images (cluster essentials, tap, and tbs-full-dependencies) to ECR.  This adds over an hour to the process.  If this is not required, consider alternative approaches.
+
 ## Prereqs
 - Installed eksctl through brew
 - Needed to update the aws cli using command line installer - https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html
 
-## Install
+## Setup environment
+
+Update the params.yaml file with your environment specific values and then setup shell variables.
+
+```bash
+cp local-config/params-REDACTED.yaml local-config/params.yaml
+# Update params.yaml based upon your environment
+export PARAMS_YAML=local-config/params.yaml
+```
+
+## Relocate TAP Images
+
+```bash
+# Need to create ECR repositories before pushing images
+aws ecr create-repository --repository-name tap-images --region $AWS_REGION
+
+# Login to ECR (12 hour access)
+aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
+# Login to Tanzu Net
+echo $INSTALL_REGISTRY_PASSWORD | docker login --username $INSTALL_REGISTRY_USERNAME --password-stdin registry.tanzu.vmware.com
+
+export TAP_VERSION=$(yq e .tap.version $PARAMS_YAML)
+export INSTALL_REGISTRY_HOSTNAME=$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
+export INSTALL_REPO=tap-images
+
+imgpkg copy --concurrency 1 -b registry.tanzu.vmware.com/tanzu-application-platform/tap-packages:${TAP_VERSION} --to-repo ${INSTALL_REGISTRY_HOSTNAME}/${INSTALL_REPO}
+# The above command took 1.5 hours on my macbook and home internet.  Consider continuing on through next several steps and then stopping an waiting to complete before
+# Creating Tanzu Package Repository
+
+```
+
+## Create EKS Cluster
 
 ```bash
 export AWS_ACCOUNT_ID=$(yq e .aws.account-id $PARAMS_YAML)
 export AWS_REGION=$(yq e .aws.region $PARAMS_YAML)
 export EKS_CLUSTER_NAME=$(yq e .aws.eks-cluster-name $PARAMS_YAML)
-export K8S_VERSION=$(yq e .aws.eks-k8s-versionaccount-id $PARAMS_YAML)
+export K8S_VERSION=$(yq e .aws.eks-k8s-version $PARAMS_YAML)
 
 # --with-oidc flag ensures that an IAM OIDC provider is setup for the cluster.  This is requried for CSI Driver.  If you don't do this here, you
 # woudl have to follow steps at https://docs.aws.amazon.com/eks/latest/userguide/enable-iam-roles-for-service-accounts.html
-eksctl create cluster --name $EKS_CLUSTER_NAME --managed --region $AWS_REGION --instance-types t3.large --version $K8S_VERSION --with-oidc -N 5
-
-# You will relocate tap images here
-aws ecr create-repository --repository-name tap-images --region $AWS_REGION
-
-# TBS will create clusterbuilder, clusterstack iamges here
-aws ecr create-repository --repository-name tap-build-service --region $AWS_REGION
-
-# Create IAM Roles
-./scrips/iam-roles.sh
+eksctl create cluster --name $EKS_CLUSTER_NAME --managed --region $AWS_REGION --instance-types t3.xlarge --version $K8S_VERSION --with-oidc -N 4
 
 ```
 
@@ -46,7 +70,7 @@ eksctl create iamserviceaccount \
 # Create the add on referencing the role above
 eksctl create addon --name aws-ebs-csi-driver --cluster $EKS_CLUSTER_NAME --service-account-role-arn arn:aws:iam::$AWS_ACCOUNT_ID:role/AmazonEKS_EBS_CSI_DriverRole --force
 
-# Validate the addon was created properly.  Look at Status and Issues columns
+# Validate the addon was created properly.  Look at Status=ACTIVE and Issues=0
 eksctl get addon --name aws-ebs-csi-driver --cluster $EKS_CLUSTER_NAME
 
 ```
@@ -70,41 +94,40 @@ popd
 
 ```
 
+## Setup IAM Roles for Access to ECR
+```bash
+# Create IAM Roles for TBS and Supply Chain to write images to tap-build-service and tanzu-application-platform repositories
+./scripts/iam-roles.sh
+
+```
+
 ## Deploy Cluster Essentials
 
 ```bash
 pivnet download-product-files --product-slug='tanzu-cluster-essentials' --release-version='1.3.0' --product-file-id=1330472 -d /tmp/
 mkdir $HOME/tanzu-cluster-essentials
 tar -xvf /tmp/tanzu-cluster-essentials-darwin-amd64-1.3.0.tgz -C $HOME/tanzu-cluster-essentials
-kubectl create namespace kapp-controller
 
-export INSTALL_BUNDLE=registry.tanzu.vmware.com/tanzu-cluster-essentials/cluster-essentials-bundle@sha256:54bf611711923dccd7c7f10603c846782b90644d48f1cb570b43a082d18e23b9
-export INSTALL_REGISTRY_HOSTNAME=registry.tanzu.vmware.com
-export INSTALL_REGISTRY_USERNAME=$(yq e .tanzunet.username $PARAMS_YAML)
-export INSTALL_REGISTRY_PASSWORD=$(yq e .tanzunet.password $PARAMS_YAML)
+aws ecr create-repository --repository-name cluster-essentials-bundle --region $AWS_REGION
+
+export INSTALL_REGISTRY_HOSTNAME=$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
+export INSTALL_BUNDLE=$INSTALL_REGISTRY_HOSTNAME/cluster-essentials-bundle@sha256:54bf611711923dccd7c7f10603c846782b90644d48f1cb570b43a082d18e23b9
+export INSTALL_REGISTRY_USERNAME=AWS
+export INSTALL_REGISTRY_PASSWORD=$(aws ecr get-login-password --region $AWS_REGION)
+
+imgpkg copy \
+  -b registry.tanzu.vmware.com/tanzu-cluster-essentials/cluster-essentials-bundle@sha256:54bf611711923dccd7c7f10603c846782b90644d48f1cb570b43a082d18e23b9 \
+  --to-repo $INSTALL_REGISTRY_HOSTNAME/cluster-essentials-bundle
+
+
 pushd $HOME/tanzu-cluster-essentials
 ./install.sh --yes
 popd
 ```
 
-## Relocate TAP Images
-
-```bash
-# Login to ECR (12 hour access)
-aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
-# Login to Tanzu Net
-echo $INSTALL_REGISTRY_PASSWORD | docker login --username $INSTALL_REGISTRY_USERNAME --password-stdin registry.tanzu.vmware.com
-
-export TAP_VERSION=$(yq e .tap.version $PARAMS_YAML)
-export INSTALL_REGISTRY_HOSTNAME=$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
-export INSTALL_REPO=tap-images
-
-imgpkg copy --concurrency 1 -b registry.tanzu.vmware.com/tanzu-application-platform/tap-packages:${TAP_VERSION} --to-repo ${INSTALL_REGISTRY_HOSTNAME}/${INSTALL_REPO}
-# The above command took 1.5 hours on my macbook and home internet
-
-```
-
 ## Create Tanzu Package Repository
+
+>Note: Ensure that the relocation of TAP images has completed before continuing.
 
 ```bash
 kubectl create ns tap-install
@@ -119,6 +142,9 @@ tanzu package available list --namespace tap-install
 ## Deploy TAP
 
 ```bash
+# TBS will create clusterbuilder, clusterstack iamges here.  Need to create ECR repositories before, TBS can push images there
+aws ecr create-repository --repository-name tap-build-service --region $AWS_REGION
+
 # Generate TAP Values, using mostly default values
 ./scripts/gen-tap-values.sh 
 
@@ -148,7 +174,9 @@ tanzu package install full-tbs-deps -p full-tbs-deps.tanzu.vmware.com -v $TBS_VE
 
 ```bash
 kubectl get service envoy -n tanzu-system-ingress
-# Add CNAME record for "*."+$(yq e .tap.shared-ingress $PARAMS_YAML)
+# Add CNAME record for "*."+$(yq e .tap.ingress-domain $PARAMS_YAML)
+
+open http://tap-gui.$(yq e .tap.ingress-domain $PARAMS_YAML)
 ```
 
 ## Setup Developer Namespace
@@ -172,26 +200,25 @@ Follow [Getting Started](https://docs.vmware.com/en/VMware-Tanzu-Application-Pla
 ## Teardown
 
 ```bash
-# delete EKS Cluster
+# Delete EKS Cluster
 eksctl delete cluster tap-on-aws
 
-#remove ECR repositories
-aws ecr delete-repository --repository-name tanzu-application-platform/tanzu-java-web-app-default --force
-aws ecr delete-repository --repository-name tanzu-application-platform/tanzu-java-web-app-default-bundle --force
-aws ecr delete-repository --repository-name tanzu-application-platform/tanzu-java-web-app-default-source --force
-aws ecr delete-repository --repository-name tap-images --force
-aws ecr delete-repository --repository-name tap-build-service --force
-aws ecr delete-repository --repository-name tbs-full-deps --force
+# Remove ECR repositories
+aws ecr delete-repository --repository-name tanzu-application-platform/tanzu-java-web-app-default --force --region $AWS_REGION
+aws ecr delete-repository --repository-name tanzu-application-platform/tanzu-java-web-app-default-bundle --force --region $AWS_REGION
+aws ecr delete-repository --repository-name tanzu-application-platform/tanzu-java-web-app-default-source --force --region $AWS_REGION
+aws ecr delete-repository --repository-name tap-images --force --region $AWS_REGION
+aws ecr delete-repository --repository-name tap-build-service --force --region $AWS_REGION
+aws ecr delete-repository --repository-name tbs-full-deps --force --region $AWS_REGION
 
-#remove IAM Roles
-aws iam delete-role --role-name tap-workload
+# Remove IAM Roles
+aws iam delete-role-policy --role-name tap-build-service --policy-name tapBuildServicePolicy
 aws iam delete-role --role-name tap-build-service
-
-#delete csi role AmazonEKS_EBS_CSI_DriverRole
-
-Must detail policy from role Detail policy: AmazonEBSCSIDriverPolicy???
+aws iam delete-role-policy --role-name tap-workload --policy-name tapWorkload
+aws iam delete-role --role-name tap-workload
+aws iam detach-role-policy --role-name AmazonEKS_EBS_CSI_DriverRole --policy-arn arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy
 aws iam delete-role --role-name AmazonEKS_EBS_CSI_DriverRole
 
-#delete CNAME in regestra
+# Delete CNAME in regestra
 "*." + $(yq e .tap.ingress-domain $PARAMS_YAML)
 ```
