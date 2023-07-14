@@ -5,15 +5,13 @@
 
 DEV_NAMESPACE=$(yq e .tap.dev-namespace $PARAMS_YAML)
 
-ROLE_ARN=arn:aws:iam::${AWS_ACCOUNT_ID}:role/tap-workload
-
-cat <<EOF | kubectl -n ${DEV_NAMESPACE} apply -f -
+cat <<EOF | kubectl -n $DEV_NAMESPACE apply -f -
 apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: default
   annotations:
-    eks.amazonaws.com/role-arn: ${ROLE_ARN}
+    eks.amazonaws.com/role-arn: "arn:aws:iam::${AWS_ACCOUNT_ID}:role/tap-workload"
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding

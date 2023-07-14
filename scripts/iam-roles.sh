@@ -7,26 +7,28 @@
 : ${AWS_REGION?"Need to set AWS_REGION environment variable"}
 : ${AWS_ACCOUNT_ID?"Need to set AWS_ACCOUNT_ID environment variable"}
 
+mkdir -p generated/iam && pushd generated/iam
 
-export oidcProvider=$(aws eks describe-cluster --name $EKS_CLUSTER_NAME --region $AWS_REGION --output json | jq '.cluster.identity.oidc.issuer' | tr -d '"' | sed 's/https:\/\///')
-GENERATED_FOLDER_PATH=generated/iam
-mkdir -p $GENERATED_FOLDER_PATH
-cat << EOF > $GENERATED_FOLDER_PATH/build-service-trust-policy.json
+# Begin: The following is copied directoy from the documentation, without change
+
+# Retrieve the OIDC endpoint from the Kubernetes cluster and store it for use in the policy.
+export OIDCPROVIDER=$(aws eks describe-cluster --name $EKS_CLUSTER_NAME --region $AWS_REGION --output json | jq '.cluster.identity.oidc.issuer' | tr -d '"' | sed 's/https:\/\///')
+cat << EOF > build-service-trust-policy.json
 {
     "Version": "2012-10-17",
     "Statement": [
         {
             "Effect": "Allow",
             "Principal": {
-                "Federated": "arn:aws:iam::${AWS_ACCOUNT_ID}:oidc-provider/${oidcProvider}"
+                "Federated": "arn:aws:iam::${AWS_ACCOUNT_ID}:oidc-provider/${OIDCPROVIDER}"
             },
             "Action": "sts:AssumeRoleWithWebIdentity",
             "Condition": {
                 "StringEquals": {
-                    "${oidcProvider}:aud": "sts.amazonaws.com"
+                    "${OIDCPROVIDER}:aud": "sts.amazonaws.com"
                 },
                 "StringLike": {
-                    "${oidcProvider}:sub": [
+                    "${OIDCPROVIDER}:sub": [
                         "system:serviceaccount:kpack:controller",
                         "system:serviceaccount:build-service:dependency-updater-controller-serviceaccount"
                     ]
@@ -37,7 +39,7 @@ cat << EOF > $GENERATED_FOLDER_PATH/build-service-trust-policy.json
 }
 EOF
 
-cat << EOF > $GENERATED_FOLDER_PATH/build-service-policy.json
+cat << EOF > build-service-policy.json
 {
     "Version": "2012-10-17",
     "Statement": [
@@ -105,7 +107,7 @@ cat << EOF > $GENERATED_FOLDER_PATH/build-service-policy.json
 }
 EOF
 
-cat << EOF > $GENERATED_FOLDER_PATH/workload-policy.json
+cat << EOF > workload-policy.json
 {
     "Version": "2012-10-17",
     "Statement": [
@@ -162,8 +164,8 @@ cat << EOF > $GENERATED_FOLDER_PATH/workload-policy.json
                 "ecr:SetRepositoryPolicy"
             ],
             "Resource": [
-                "arn:aws:ecr:${AWS_REGION}:${AWS_ACCOUNT_ID}:repository/tap-build-service",
-                "arn:aws:ecr:${AWS_REGION}:${AWS_ACCOUNT_ID}:repository/tanzu-application-platform/*"
+                "arn:aws:ecr:${AWS_REGION}:${AWS_ACCOUNT_ID}:repository/tbs-full-deps", 
+                "arn:aws:ecr:${AWS_REGION}:${AWS_ACCOUNT_ID}:repository/tanzu-application-platform/*" 
             ],
             "Effect": "Allow",
             "Sid": "TAPEcrWorkloadScoped"
@@ -172,20 +174,20 @@ cat << EOF > $GENERATED_FOLDER_PATH/workload-policy.json
 }
 EOF
 
-cat << EOF > $GENERATED_FOLDER_PATH/workload-trust-policy.json
+cat << EOF > workload-trust-policy.json
 {
     "Version": "2012-10-17",
     "Statement": [
         {
             "Effect": "Allow",
             "Principal": {
-                "Federated": "arn:aws:iam::${AWS_ACCOUNT_ID}:oidc-provider/${oidcProvider}"
+                "Federated": "arn:aws:iam::${AWS_ACCOUNT_ID}:oidc-provider/${OIDCPROVIDER}"
             },
             "Action": "sts:AssumeRoleWithWebIdentity",
             "Condition": {
                 "StringEquals": {
-                    "${oidcProvider}:sub": "system:serviceaccount:default:default",
-                    "${oidcProvider}:aud": "sts.amazonaws.com"
+                    "${OIDCPROVIDER}:sub": "system:serviceaccount:default:default",
+                    "${OIDCPROVIDER}:aud": "sts.amazonaws.com"
                 }
             }
         }
@@ -194,12 +196,87 @@ cat << EOF > $GENERATED_FOLDER_PATH/workload-trust-policy.json
 EOF
 
 
-# Create the Build Service Role
-aws iam create-role --role-name tap-build-service --assume-role-policy-document file://$GENERATED_FOLDER_PATH/build-service-trust-policy.json
+# Create the Tanzu Build Service Role
+aws iam create-role --role-name tap-build-service --assume-role-policy-document file://build-service-trust-policy.json
 # Attach the Policy to the Build Role
-aws iam put-role-policy --role-name tap-build-service --policy-name tapBuildServicePolicy --policy-document file://$GENERATED_FOLDER_PATH/build-service-policy.json
+aws iam put-role-policy --role-name tap-build-service --policy-name tapBuildServicePolicy --policy-document file://build-service-policy.json
 
 # Create the Workload Role
-aws iam create-role --role-name tap-workload --assume-role-policy-document file://$GENERATED_FOLDER_PATH/workload-trust-policy.json
+aws iam create-role --role-name tap-workload --assume-role-policy-document file://workload-trust-policy.json
 # Attach the Policy to the Workload Role
-aws iam put-role-policy --role-name tap-workload --policy-name tapWorkload --policy-document file://$GENERATED_FOLDER_PATH/workload-policy.json
+aws iam put-role-policy --role-name tap-workload --policy-name tapWorkload --policy-document file://workload-policy.json
+
+
+cat << EOF > local-source-proxy-trust-policy.json
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Effect": "Allow",
+            "Principal": {
+                "Federated": "arn:aws:iam::${AWS_ACCOUNT_ID}:oidc-provider/${OIDCPROVIDER}"
+            },
+            "Action": "sts:AssumeRoleWithWebIdentity",
+            "Condition": {
+                "StringEquals": {
+                    "${OIDCPROVIDER}:aud": "sts.amazonaws.com"
+                },
+                "StringLike": {
+                    "${OIDCPROVIDER}:sub": [
+                        "system:serviceaccount:tap-local-source-system:proxy-manager"
+                    ]
+                }
+            }
+        }
+    ]
+}
+EOF
+
+cat << EOF > local-source-proxy-policy.json
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Action": [
+                "ecr:GetAuthorizationToken"
+            ],
+            "Resource": "*",
+            "Effect": "Allow",
+            "Sid": "TAPLSPGlobal"
+        },
+        {
+            "Effect": "Allow",
+            "Action": [
+                "ecr:BatchCheckLayerAvailability",
+                "ecr:GetDownloadUrlForLayer",
+                "ecr:GetRepositoryPolicy",
+                "ecr:DescribeRepositories",
+                "ecr:ListImages",
+                "ecr:DescribeImages",
+                "ecr:BatchGetImage",
+                "ecr:GetLifecyclePolicy",
+                "ecr:GetLifecyclePolicyPreview",
+                "ecr:ListTagsForResource",
+                "ecr:DescribeImageScanFindings",
+                "ecr:InitiateLayerUpload",
+                "ecr:UploadLayerPart",
+                "ecr:CompleteLayerUpload",
+                "ecr:PutImage"
+            ],
+            "Resource": [
+                "arn:aws:ecr:${AWS_REGION}:${AWS_ACCOUNT_ID}:repository/tap-lsp"
+            ],
+            "Sid": "TAPLSPScoped"
+        }
+    ]
+}
+EOF
+
+# Create the TAP Local Source Proxy Role
+aws iam create-role --role-name tap-local-source-proxy --assume-role-policy-document file://local-source-proxy-trust-policy.json
+# Attach the Policy to the tap-local-source-proxy Role created above
+aws iam put-role-policy --role-name tap-local-source-proxy --policy-name tapLocalSourcePolicy --policy-document file://local-source-proxy-policy.json
+
+# End: The above is copied directoy from the documentation, without change
+
+popd

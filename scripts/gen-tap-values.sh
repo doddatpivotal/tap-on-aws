@@ -13,11 +13,13 @@ cat << EOF > generated/tap-values.yaml
 shared:
   ingress_domain: ${INGRESS_DOMAIN}
 
+  kubernetes_version: "1.27"
+
 ceip_policy_disclosed: true
 
-#The above keys are minimum numbers of entries needed in tap-values.yaml to get a functioning TAP Full profile installation.
+# The above keys are minimum numbers of entries needed in tap-values.yaml to get a functioning TAP Full profile installation.
 
-#Below are the keys which may have default values set, but can be overridden.
+# Below are the keys which may have default values set, but can be overridden.
 
 profile: full # Can take iterate, build, run, view.
 
@@ -36,6 +38,20 @@ ootb_supply_chain_basic: # Based on supply_chain set above, can be changed to oo
     # tanzu-application-platform/<workloadname>-<namespace>-bundle
     repository: tanzu-application-platform
 
+contour:
+  infrastructure_provider: aws
+  envoy:
+    service:
+      aws:
+        LBType: nlb
+
+local_source_proxy:
+  push_secret:
+    aws_iam_role_arn: "arn:aws:iam::${AWS_ACCOUNT_ID}:role/tap-local-source-proxy"
+  #! (Required) This is the repository where all your source code will be uploaded
+  repository: ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/tap-lsp
+
+
 buildservice:
   kp_default_repository: ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/tap-build-service
   # Enable the build service k8s service account to bind to the AWS IAM Role
@@ -49,8 +65,9 @@ ootb_templates:
   iaas_auth: true
 
 tap_gui:
-  service_type: ClusterIP # If shared.ingress_domain is set earlier, this must be set to ClusterIP.
   app_config:
+    auth:
+      allowGuestAccess: true  # This allows unauthenticated users to log in to your portal. If you want to deactivate it, make sure you configure an alternative auth provider.
     catalog:
       locations:
         - type: url
@@ -63,5 +80,8 @@ metadata_store:
 scanning:
   metadataStore:
     url: "" # Configuration is moved, so set this string to empty.
+
+tap_telemetry:
+  installed_for_vmware_internal_use: "true"
 
 EOF
