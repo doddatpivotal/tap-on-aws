@@ -27,13 +27,13 @@ export INSTALL_REGISTRY_USERNAME=AWS
 export INSTALL_REGISTRY_PASSWORD=$(aws ecr get-login-password --region $AWS_REGION)
 export INSTALL_REGISTRY_HOSTNAME=$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
 export CLUSTER_ESSENTIALS_INSTALL_BUNDLE_SHA256=54e516b5d088198558d23cababb3f907cd8073892cacfb2496bb9d66886efe15
+export K8S_VERSION=$(yq e .aws.eks-k8s-version $PARAMS_YAML)
 
 ```
 
 ## Create EKS Cluster
 
 ```bash
-export K8S_VERSION=$(yq e .aws.eks-k8s-version $PARAMS_YAML)
 
 # --with-oidc flag ensures that an IAM OIDC provider is setup for the cluster.  This is requried for CSI Driver.  If you don't do this here, you
 # woudl have to follow steps at https://docs.aws.amazon.com/eks/latest/userguide/enable-iam-roles-for-service-accounts.html
@@ -280,6 +280,8 @@ aws iam delete-role-policy --role-name tap-workload --policy-name tapWorkload
 aws iam delete-role --role-name tap-workload
 aws iam delete-role-policy --role-name tap-local-source-proxy --policy-name tapLocalSourcePolicy
 aws iam delete-role --role-name tap-local-source-proxy
+
+# Following is not necessary if you already deleted the eks clsuter
 aws iam detach-role-policy --role-name AmazonEKS_EBS_CSI_DriverRole --policy-arn arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy
 aws iam delete-role --role-name AmazonEKS_EBS_CSI_DriverRole
 
