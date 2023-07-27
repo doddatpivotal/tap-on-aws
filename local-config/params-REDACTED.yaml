@@ -2,12 +2,12 @@ aws:
   account-id: REDACTED #! aws sts get-caller-identity --output json | jq ".Account" -r
   region: us-east-2
   eks-cluster-name: tap-on-aws
-  eks-k8s-version: 1.23
+  eks-k8s-version: 1.27
 tanzunet:
   username: REDACTED
   password: REDACTED
 tap:
-  version: 1.3.2
-  ingress-domain: REDACTED
+  version: 1.6.1
+  ingress-domain: REDACTED #! eg. tap.tanzu-aws-lab.winterfell.online
   dev-namespace: default
   git-catalog-url: github.com/tanzu-end-to-end/acme-catalog
