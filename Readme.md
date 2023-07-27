@@ -1,7 +1,8 @@
 # TAP on AWS
 
-[Docs](https://docs.vmware.com/en/VMware-Tanzu-Application-Platform/1.6/tap/GUID-aws-install-intro.html)
+The Tanzu Application Platform runs great on AWS.  You can get up and running following the [AWS Specific Installation Docs](https://docs.vmware.com/en/VMware-Tanzu-Application-Platform/1.6/tap/install-aws-intro.html).
 
+The docs provide some deployment optionality.  It also references some external content for certain tasks.  This repository follows those docs, presenting the actual commands I had executed to complete the installation.
 This plan assumes relocating images (cluster essentials, tap, and tbs-full-dependencies) to ECR.  This adds over an hour to the process.  If this is not required, consider alternative approaches.
 
 ## Prereqs
@@ -103,14 +104,6 @@ aws ecr create-repository --repository-name tanzu-cluster-essentials --region $A
 ```bash
 # Create IAM Roles for TBS and Supply Chain to write images to tap-build-service and tanzu-application-platform repositories
 
-# Build Service
-#tap-build-service", // Required for write permissions
-#tap-images // Required for BatchGetImage, otherwise wouldn't need explicit mention
-#tbs-full-deps" // Required for BatchGetImage, otherwise wouldn't need explicit mention
-# Workload 
-# // tbs-full-deps is Required for BatchGetImage, otherwise wouldn't need explicit mention
-# // tanzu-application-platform/* TAP Supply Chain will create images meeting this repository prefix
-
 ./scripts/iam-roles.sh
 
 ```
@@ -149,10 +142,7 @@ IMGPKG_REGISTRY_HOSTNAME_0=registry.tanzu.vmware.com \
 ## Deploy Cluster Essentials
 
 ```bash
-
-
 export INSTALL_BUNDLE=$INSTALL_REGISTRY_HOSTNAME/tanzu-cluster-essentials@sha256:$CLUSTER_ESSENTIALS_INSTALL_BUNDLE_SHA256
-
 
 pushd $HOME/tanzu-cluster-essentials
 ./install.sh --yes
