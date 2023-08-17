@@ -73,6 +73,9 @@ tap_gui:
         - type: url
           target: https://${GIT_CATALOG_URL}/catalog-info.yaml
 
+namespace_provisioner:
+  aws_iam_role_arn: arn:aws:iam::${AWS_ACCOUNT_ID}:role/tap-workload
+
 metadata_store:
   ns_for_export_app_cert: ${DEV_NAMESPACE}
   app_service_type: ClusterIP # Defaults to LoadBalancer. If shared.ingress_domain is set earlier, this must be set to ClusterIP.

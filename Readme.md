@@ -132,7 +132,7 @@ IMGPKG_REGISTRY_HOSTNAME_0=registry.tanzu.vmware.com \
   IMGPKG_REGISTRY_HOSTNAME_1=$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com \
   IMGPKG_REGISTRY_USERNAME_1=$INSTALL_REGISTRY_USERNAME \
   IMGPKG_REGISTRY_PASSWORD_1=$INSTALL_REGISTRY_PASSWORD \
-  ./imgpkg copy \
+  imgpkg copy \
     -b registry.tanzu.vmware.com/tanzu-cluster-essentials/cluster-essentials-bundle@sha256:$CLUSTER_ESSENTIALS_INSTALL_BUNDLE_SHA256 \
     --to-repo $INSTALL_REGISTRY_HOSTNAME/tanzu-cluster-essentials \
     --include-non-distributable-layers
@@ -233,7 +233,8 @@ open https://tap-gui.$(yq e .tap.ingress-domain $PARAMS_YAML)
 ## Setup Developer Namespace
 
 ```bash
-./scripts/enable-single-user-access.sh
+DEV_NAMESPACE=$(yq e .tap.dev-namespace $PARAMS_YAML)
+kubectl label namespace $DEV_NAMESPACE apps.tanzu.vmware.com/tap-ns=""
 ```
 
 ## Test out Getting Started

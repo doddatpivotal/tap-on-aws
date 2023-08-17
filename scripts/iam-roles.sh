@@ -12,7 +12,7 @@ mkdir -p generated/iam && pushd generated/iam
 # Begin: The following is copied directoy from the documentation, without change
 
 # Retrieve the OIDC endpoint from the Kubernetes cluster and store it for use in the policy.
-export OIDCPROVIDER=$(aws eks describe-cluster --name $EKS_CLUSTER_NAME --region $AWS_REGION --output json | jq '.cluster.identity.oidc.issuer' | tr -d '"' | sed 's/https:\/\///')
+export OIDCPROVIDER=$(aws eks describe-cluster --name $EKS_CLUSTER_NAME --region $AWS_REGION --output text --query '.cluster.identity.oidc.issuer' | sed 's/https:\/\///')
 cat << EOF > build-service-trust-policy.json
 {
     "Version": "2012-10-17",
